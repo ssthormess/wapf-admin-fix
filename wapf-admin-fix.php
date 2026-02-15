@@ -88,8 +88,12 @@ add_action( 'init', function() {
                 .wapf-block-pro {
                     zoom: 0.000000000000000000000001 !important;
                 }
-                #wapf-field-group-variables .wapf-list--empty {
+                #wapf-field-group-variables .wapf-list--empty,
+                #wapf-field-group-conditions .wapf-list--empty {
                     display: block !important;
+                }
+                #wapf-field-group-conditions .wapf-list--empty:has(~ div:not(.wapf-list--empty)) {
+                    display: none !important;
                 }
             </style>
             <script type="text/javascript">
@@ -100,10 +104,17 @@ add_action( 'init', function() {
                 // 1. Force UI Visibility
                 $('.wapf-list--empty').hide(); 
                 $('.wapf-performance').hide();
+                
+                // Show conditions empty state if no rules
+                var $condList = $('.apf-conditions-wrapper');
+                if ($condList.children().length === 0) {
+                    $('#wapf-field-group-conditions .wapf-list--empty').show();
+                }
 
                 // 2. Auto-sync on form submit
                 $('form#post').on('submit', function() {
                     syncWapfFields(true); // Silent sync
+                    syncWapfConditions(true);
                 });
 
                 // 3. Inject Input & Inject Requirements
@@ -115,6 +126,14 @@ add_action( 'init', function() {
                     $originalInput.replaceWith($freshInput);
                 } else if ($originalInput.length === 0) {
                      $('<input type="hidden" name="wapf-fields">').appendTo('form#post');
+                }
+
+                // Inject wapf-conditions
+                var $originalCondInput = $('input[name="wapf-conditions"]');
+                if ($originalCondInput.length > 0 && ($originalCondInput.attr('rv-value') || $originalCondInput.attr('data-rv-value'))) {
+                    var $freshCondInput = $('<input type="hidden" name="wapf-conditions">');
+                    $freshCondInput.val($originalCondInput.val());
+                    $originalCondInput.replaceWith($freshCondInput);
                 }
 
                 // Inject ID and Type which are required by the backend
@@ -265,7 +284,99 @@ add_action( 'init', function() {
                     $('#publish').trigger('click');
                 });
 
-                // 7. Manual Data Sync Function (Hybrid: Preserve choices, update edits)
+                // 7. Manual "Conditions" handlers
+                // Add your first rule
+                $(document).on('click', '#wapf-field-group-conditions .wapf-list--empty .button-primary', function(e) {
+                    e.preventDefault();
+                    var $condList = $('[data-raw-conditions]');
+                    var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
+                    
+                    // Add first group with one rule
+                    conds.push({
+                        rules: [{
+                            subject: 'product_tag',
+                            condition: 'p_tags',
+                            value: []
+                        }]
+                    });
+                    
+                    saveConditions($condList, conds);
+                });
+
+                // "And" rule handler (add rule to group)
+                $(document).on('click', '.apf-condition-group-wrapper .apf-button', function(e) {
+                    if ($(this).text().trim().toLowerCase() !== 'and') return;
+                    e.preventDefault();
+                    
+                    var $groupWrapper = $(this).closest('.apf-condition-group-wrapper');
+                    var groupIdx = parseInt($groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/)[1]);
+                    
+                    var $condList = $('[data-raw-conditions]');
+                    var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
+                    
+                    if (conds[groupIdx]) {
+                        conds[groupIdx].rules.push({
+                            subject: 'product_tag',
+                            condition: 'p_tags',
+                            value: []
+                        });
+                        saveConditions($condList, conds);
+                    }
+                });
+
+                // "Or" group handler (add new group)
+                $(document).on('click', '.apf-conditions-footer .apf-button', function(e) {
+                    if ($(this).text().trim().toLowerCase() !== 'or') return;
+                    e.preventDefault();
+                    
+                    var $condList = $('[data-raw-conditions]');
+                    var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
+                    
+                    conds.push({
+                        rules: [{
+                            subject: 'product_tag',
+                            condition: 'p_tags',
+                            value: []
+                        }]
+                    });
+                    
+                    saveConditions($condList, conds);
+                });
+
+                // Delete rule handler
+                $(document).on('click', '.apf-condition-group-wrapper .apf-button-transparent', function(e) {
+                    e.preventDefault();
+                    if (!confirm('Are you sure you want to delete this rule?')) return;
+                    
+                    var $row = $(this).closest('tr');
+                    var $groupWrapper = $(this).closest('.apf-condition-group-wrapper');
+                    
+                    var groupIdx = parseInt($groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/)[1]);
+                    var ruleIdx = parseInt($row.attr('class').match(/wapf-rulegroup-rule-(\d+)/)[1]);
+                    
+                    var $condList = $('[data-raw-conditions]');
+                    var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
+                    
+                    if (conds[groupIdx] && conds[groupIdx].rules[ruleIdx]) {
+                        conds[groupIdx].rules.splice(ruleIdx, 1);
+                        
+                        // If group is empty, remove group
+                        if (conds[groupIdx].rules.length === 0) {
+                            conds.splice(groupIdx, 1);
+                        }
+                        
+                        saveConditions($condList, conds);
+                    }
+                });
+
+                function saveConditions($el, conds) {
+                    var json = JSON.stringify(conds);
+                    $el.attr('data-raw-conditions', json);
+                    $('input[name="wapf-conditions"]').val(json);
+                    $('#publish').trigger('click');
+                }
+
+                // 8. Manual Data Sync Functions
                 function syncWapfFields(silent) {
                     var $container = $('[data-raw-fields]');
                     if ($container.length === 0) return;
@@ -311,6 +422,44 @@ add_action( 'init', function() {
                     var jsonString = JSON.stringify(fields);
                     $('input[name="wapf-fields"]').val(jsonString);
                     $container.attr('data-raw-fields', jsonString);
+                }
+
+                function syncWapfConditions(silent) {
+                    var $container = $('[data-raw-conditions]');
+                    if ($container.length === 0) return;
+                    
+                    var conds = JSON.parse($container.attr('data-raw-conditions') || '[]');
+                    
+                    $('.apf-condition-group-wrapper').each(function(groupIdx) {
+                        var $group = $(this);
+                        if (!conds[groupIdx]) return;
+                        
+                        $group.find('tr').each(function(ruleIdx) {
+                            var $rule = $(this);
+                            var rule = conds[groupIdx].rules[ruleIdx];
+                            if (!rule) return;
+                            
+                            // Update rule from DOM
+                            rule.subject = $rule.find('td:eq(0) select').val();
+                            rule.condition = $rule.find('td:eq(1) select:visible').val() || $rule.find('td:eq(2) select:visible').val();
+                            
+                            // Values are harder due to Select2
+                            var $select2 = $rule.find('.wapf-select2');
+                            if ($select2.length > 0) {
+                                var val = [];
+                                $select2.find('option:selected').each(function() {
+                                    val.push({ id: $(this).val(), text: $(this).text() });
+                                });
+                                rule.value = val;
+                            } else {
+                                rule.value = $rule.find('td:eq(3) input, td:eq(3) select').val();
+                            }
+                        });
+                    });
+                    
+                    var json = JSON.stringify(conds);
+                    $('input[name="wapf-conditions"]').val(json);
+                    $container.attr('data-raw-conditions', json);
                 }
             });
             
