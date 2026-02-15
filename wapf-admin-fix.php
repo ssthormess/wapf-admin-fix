@@ -11,6 +11,7 @@
  * Text Domain: wapf-admin-fix
  * Requires at least: 5.0
  * Requires PHP: 7.4
+ * Tested with WAPF: 3.1.5
  * 
  * This plugin is intended for use with Advanced Product Fields for WooCommerce,
  * which is licensed under the GNU General Public License (GPL).

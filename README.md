@@ -49,7 +49,7 @@ composer require wpackagist-plugin/wapf-admin-fix
 
 - **WordPress**: 5.0 or higher
 - **PHP**: 7.4 or higher
-- **Advanced Product Fields for WooCommerce**: Must be installed
+- **Advanced Product Fields for WooCommerce**: Must be installed (tested with v3.1.5)
 - **WooCommerce**: Required by WAPF
 
 ## 💻 Usage
