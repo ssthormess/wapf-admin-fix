@@ -413,7 +413,9 @@ add_action( 'init', function() {
                                     disabled: $opt.find('.wapf-option__disabled input').is(':checked'),
                                     options: [],
                                     pricing_type: $opt.find('.wapf-pricing-list').val() || 'none',
-                                    pricing_amount: parseFloat($opt.find('input[type="number"]').val()) || 0
+                                    pricing_amount: ($opt.find('.wapf-pricing-list').val() === 'fx') 
+                                        ? $opt.find('.wapf-input-prepend-append input[type="text"]').val() || '' 
+                                        : (parseFloat($opt.find('input[type="number"]').val()) || 0)
                                 });
                             });
                             if (choices.length > 0) field.choices = choices;
