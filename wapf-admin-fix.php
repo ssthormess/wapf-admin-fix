@@ -304,12 +304,14 @@ add_action( 'init', function() {
                 });
 
                 // "And" rule handler (add rule to group)
-                $(document).on('click', '.apf-condition-group-wrapper .apf-button', function(e) {
+                $(document).on('click', '#wapf-field-group-conditions .apf-condition-group-wrapper .apf-button', function(e) {
                     if ($(this).text().trim().toLowerCase() !== 'and') return;
                     e.preventDefault();
                     
                     var $groupWrapper = $(this).closest('.apf-condition-group-wrapper');
-                    var groupIdx = parseInt($groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/)[1]);
+                    var match = $groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/);
+                    if (!match) return;
+                    var groupIdx = parseInt(match[1]);
                     
                     var $condList = $('[data-raw-conditions]');
                     var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
@@ -325,7 +327,7 @@ add_action( 'init', function() {
                 });
 
                 // "Or" group handler (add new group)
-                $(document).on('click', '.apf-conditions-footer .apf-button', function(e) {
+                $(document).on('click', '#wapf-field-group-conditions .apf-conditions-footer .apf-button', function(e) {
                     if ($(this).text().trim().toLowerCase() !== 'or') return;
                     e.preventDefault();
                     
@@ -344,15 +346,19 @@ add_action( 'init', function() {
                 });
 
                 // Delete rule handler
-                $(document).on('click', '.apf-condition-group-wrapper .apf-button-transparent', function(e) {
+                $(document).on('click', '#wapf-field-group-conditions .apf-condition-group-wrapper .apf-button-transparent', function(e) {
                     e.preventDefault();
                     if (!confirm('Are you sure you want to delete this rule?')) return;
                     
                     var $row = $(this).closest('tr');
                     var $groupWrapper = $(this).closest('.apf-condition-group-wrapper');
                     
-                    var groupIdx = parseInt($groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/)[1]);
-                    var ruleIdx = parseInt($row.attr('class').match(/wapf-rulegroup-rule-(\d+)/)[1]);
+                    var groupMatch = $groupWrapper.attr('class').match(/wapf-rulegroup-(\d+)/);
+                    var ruleMatch = $row.attr('class').match(/wapf-rulegroup-rule-(\d+)/);
+                    if (!groupMatch || !ruleMatch) return;
+                    
+                    var groupIdx = parseInt(groupMatch[1]);
+                    var ruleIdx = parseInt(ruleMatch[1]);
                     
                     var $condList = $('[data-raw-conditions]');
                     var conds = JSON.parse($condList.attr('data-raw-conditions') || '[]');
@@ -400,7 +406,7 @@ add_action( 'init', function() {
                         
                         field.required = $el.find('[data-setting="required"] input').is(':checked');
                         
-                        // Scrape choices/options if they exist in DOM
+                            // Scrape choices/options if they exist in DOM
                         var $options = $el.find('.wapf-option');
                         if ($options.length > 0) {
                             var choices = [];
@@ -419,6 +425,75 @@ add_action( 'init', function() {
                                 });
                             });
                             if (choices.length > 0) field.choices = choices;
+                        }
+
+                        // Appearance attributes
+                        var $hideCart = $el.find('[data-setting="hide_cart"] input[type="checkbox"]');
+                        if ($hideCart.length > 0) field.hide_cart = $hideCart.is(':checked');
+                        
+                        var $hideCheckout = $el.find('[data-setting="hide_checkout"] input[type="checkbox"]');
+                        if ($hideCheckout.length > 0) field.hide_checkout = $hideCheckout.is(':checked');
+                        
+                        var $hideOrder = $el.find('[data-setting="hide_order"] input[type="checkbox"]');
+                        if ($hideOrder.length > 0) field.hide_order = $hideOrder.is(':checked');
+
+                        var $attrWidth = $el.find('[data-setting="attributes"] .wapf-input-prepend-append input[type="number"]');
+                        var $attrClass = $el.find('[data-setting="attributes"] .wapf-input-with-prepend input[type="text"]');
+                        if ($attrWidth.length > 0 || $attrClass.length > 0) {
+                            var w = $attrWidth.val();
+                            var c = $attrClass.val();
+                            if (w === '') {
+                                delete field.width;
+                            } else if (w !== undefined) {
+                                field.width = w;
+                            }
+                            if (c !== undefined) field.class = c;
+                        }
+
+                        // Advanced options: Clone
+                        var $cloneInputs = $el.find('[data-setting="clone"]');
+                        if ($cloneInputs.length > 0) {
+                            var $cloneEnable = $cloneInputs.find('.wapf-toggle input[type="checkbox"]');
+                            if ($cloneEnable.length > 0) {
+                                if (!field.clone) field.clone = {};
+                                field.clone.enabled = $cloneEnable.is(':checked');
+                                field.clone.type = $cloneInputs.find('select').val();
+                                var $texts = $cloneInputs.find('input[type="text"]');
+                                if ($texts.length > 0) field.clone.label = $texts.eq(0).val();
+                                if ($texts.length > 1) field.clone.add = $texts.eq(1).val();
+                                if ($texts.length > 2) field.clone.del = $texts.eq(2).val();
+                                var $maxInput = $cloneInputs.find('input[type="number"]');
+                                if ($maxInput.length > 0) field.clone.max = $maxInput.eq(0).val();
+                            }
+                        }
+
+                        // Advanced options: Field conditionals
+                        var $fieldConds = $el.find('.wapf-field__conditionals');
+                        if ($fieldConds.length > 0) {
+                            var conditionals = [];
+                            var $fieldCondsGroups = $fieldConds.find('.apf-condition-group-wrapper > div');
+                            $fieldCondsGroups.each(function() {
+                                var $group = $(this);
+                                var rules = [];
+                                $group.find('tr.conditional__rule').each(function() {
+                                    var $rule = $(this);
+                                    var fieldVal = $rule.find('td:eq(0) select').val();
+                                    var condVal = $rule.find('td:eq(1) select').val();
+                                    var valueVal = $rule.find('td:eq(2) input:visible, td:eq(2) select:visible').val();
+                                    
+                                    if (fieldVal && condVal) {
+                                        rules.push({
+                                            field: fieldVal,
+                                            condition: condVal,
+                                            value: valueVal
+                                        });
+                                    }
+                                });
+                                if (rules.length > 0) {
+                                    conditionals.push({ rules: rules });
+                                }
+                            });
+                            field.conditionals = conditionals;
                         }
                     });
                     var jsonString = JSON.stringify(fields);
