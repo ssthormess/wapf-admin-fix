@@ -107,8 +107,17 @@ add_action( 'init', function() {
                 
                 // Show conditions empty state if no rules
                 var $condList = $('.apf-conditions-wrapper');
-                if ($condList.children().length === 0) {
+                if ($condList.length > 0 && $condList.children().length === 0) {
                     $('#wapf-field-group-conditions .wapf-list--empty').show();
+                }
+                
+                // Show fields empty state if no fields
+                var $rawFields = $('[data-raw-fields]');
+                if ($rawFields.length > 0 && ($rawFields.attr('data-raw-fields') === '[]' || $rawFields.attr('data-raw-fields') === '' || !$rawFields.attr('data-raw-fields'))) {
+                     $('.wapf-field-list__body > .wapf-list--empty').show();
+                     $('.wapf-field-list__footer').hide();
+                } else {
+                     $('.wapf-field-list__footer').show();
                 }
 
                 // 2. Auto-sync on form submit
@@ -165,7 +174,7 @@ add_action( 'init', function() {
                 }
 
                 // 4. Manual "Add a Field" button handler (workaround for TinyBind detachment)
-                $(document).on('click', '.wapf-field-list__footer .button-primary', function(e) {
+                $(document).on('click', '.wapf-field-list__footer .button-primary, .wapf-field-list__body .wapf-list--empty .button-primary', function(e) {
                     e.preventDefault();
                     
                     var $fieldList = $('[data-raw-fields]');
@@ -197,6 +206,38 @@ add_action( 'init', function() {
                     $fieldList.attr('data-raw-fields', JSON.stringify(fields));
                     $('input[name="wapf-fields"]').val(JSON.stringify(fields));
                     $('#publish').trigger('click');
+                });
+
+                // 4.1 Manual "Import Fields" button handler
+                $(document).on('click', '.btn-wapf-import', function(e) {
+                    var importData = $('.wapf-import-ta').val();
+                    var mode = $('.wapf-import-mode').val();
+                    if (!importData) return;
+                    
+                    try {
+                        var parsed = JSON.parse(importData);
+                        if (!Array.isArray(parsed)) return;
+                        
+                        var $fieldList = $('[data-raw-fields]');
+                        if ($fieldList.length === 0) return;
+                        
+                        var rawFields = $fieldList.attr('data-raw-fields');
+                        var fields = JSON.parse(rawFields || '[]');
+                        
+                        if (mode === 'replace') {
+                            fields = parsed;
+                        } else {
+                            fields = fields.concat(parsed);
+                        }
+                        
+                        $fieldList.attr('data-raw-fields', JSON.stringify(fields));
+                        $('input[name="wapf-fields"]').val(JSON.stringify(fields));
+                        
+                        // Give TinyBind a moment to process original JS if any, then save
+                        setTimeout(function() { $('#publish').trigger('click'); }, 500); 
+                    } catch(err) {
+                        console.error('Failed to parse and update imported raw fields', err);
+                    }
                 });
 
                 // 5. Manual "Duplicate Field" button handler
