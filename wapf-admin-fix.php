@@ -431,6 +431,15 @@ add_action( 'init', function() {
                     var rawFields = $container.attr('data-raw-fields');
                     var fields = JSON.parse(rawFields);
                     
+                    // Settings that are handled explicitly elsewhere in this function
+                    // and should NOT be overwritten by the generic scraper below.
+                    var skipSettings = [
+                        'label', 'description', 'required',
+                        'hide_cart', 'hide_checkout', 'hide_order',
+                        'attributes', 'clone', 'conditionals', 'pricing',
+                        'options' // choices use their own loop
+                    ];
+
                     // Update each field with current DOM edits
                     $('.wapf-field').each(function(index) {
                         var $el = $(this);
@@ -438,7 +447,7 @@ add_action( 'init', function() {
                         var field = fields.find(f => f.id === fieldId);
                         if (!field) return;
                         
-                        // Update with current DOM values
+                        // --- Core always-present settings ---
                         var label = $el.find('[data-setting="label"] input').val();
                         if (label !== undefined) field.label = label;
                         
@@ -446,8 +455,35 @@ add_action( 'init', function() {
                         if (desc !== undefined) field.description = desc;
                         
                         field.required = $el.find('[data-setting="required"] input').is(':checked');
+
+                        // --- Generic scraper: capture ALL [data-setting] values ---
+                        // This covers: placeholder, default, pattern, minlength, maxlength,
+                        // minimum, maximum, number_type, display, message, label_true,
+                        // label_false, label_pos, grid_layout, item_width, etc.
+                        $el.find('[data-setting]').each(function() {
+                            var $setting = $(this);
+                            var settingKey = $setting.attr('data-setting');
+
+                            // Skip settings handled explicitly below
+                            if (skipSettings.indexOf(settingKey) !== -1) return;
+
+                            // Read the value from the visible/active input inside this setting wrapper
+                            var $input = $setting.find('input[type="text"]:visible, input[type="number"]:visible, input[type="email"]:visible, input[type="url"]:visible, textarea:visible, select:visible').first();
+
+                            if ($input.length === 0) return; // nothing visible to read
+
+                            var val = $input.val();
+                            if (val === undefined) return;
+
+                            // Empty string → remove the key so WAPF uses its default
+                            if (val === '') {
+                                delete field[settingKey];
+                            } else {
+                                field[settingKey] = val;
+                            }
+                        });
                         
-                            // Scrape choices/options if they exist in DOM
+                        // --- Choices/options (handled separately because they're complex) ---
                         var $options = $el.find('.wapf-option');
                         if ($options.length > 0) {
                             var choices = [];
@@ -468,7 +504,7 @@ add_action( 'init', function() {
                             if (choices.length > 0) field.choices = choices;
                         }
 
-                        // Appearance attributes
+                        // --- Appearance: hide on cart/checkout/order ---
                         var $hideCart = $el.find('[data-setting="hide_cart"] input[type="checkbox"]');
                         if ($hideCart.length > 0) field.hide_cart = $hideCart.is(':checked');
                         
@@ -478,6 +514,7 @@ add_action( 'init', function() {
                         var $hideOrder = $el.find('[data-setting="hide_order"] input[type="checkbox"]');
                         if ($hideOrder.length > 0) field.hide_order = $hideOrder.is(':checked');
 
+                        // --- Appearance: wrapper attributes (width + CSS class) ---
                         var $attrWidth = $el.find('[data-setting="attributes"] .wapf-input-prepend-append input[type="number"]');
                         var $attrClass = $el.find('[data-setting="attributes"] .wapf-input-with-prepend input[type="text"]');
                         if ($attrWidth.length > 0 || $attrClass.length > 0) {
@@ -491,7 +528,27 @@ add_action( 'init', function() {
                             if (c !== undefined) field.class = c;
                         }
 
-                        // Advanced options: Clone
+                        // --- Pricing ---
+                        var $pricingWrapper = $el.find('[data-setting="pricing"]');
+                        if ($pricingWrapper.length > 0) {
+                            var $pricingEnable = $pricingWrapper.find('.wapf-toggle input[type="checkbox"]').first();
+                            if ($pricingEnable.length > 0) {
+                                if (!field.pricing) field.pricing = { enabled: false, type: 'fixed', amount: 0 };
+                                field.pricing.enabled = $pricingEnable.is(':checked');
+                                var pricingType = $pricingWrapper.find('select:visible').val();
+                                if (pricingType) field.pricing.type = pricingType;
+                                // Amount: formula field (text) or numeric field
+                                var $pricingAmountFx = $pricingWrapper.find('input[type="text"]:visible').first();
+                                var $pricingAmountNr = $pricingWrapper.find('input[type="number"]:visible').first();
+                                if ($pricingAmountFx.length > 0) {
+                                    field.pricing.amount = $pricingAmountFx.val();
+                                } else if ($pricingAmountNr.length > 0) {
+                                    field.pricing.amount = parseFloat($pricingAmountNr.val()) || 0;
+                                }
+                            }
+                        }
+
+                        // --- Advanced: Clone/Repeater ---
                         var $cloneInputs = $el.find('[data-setting="clone"]');
                         if ($cloneInputs.length > 0) {
                             var $cloneEnable = $cloneInputs.find('.wapf-toggle input[type="checkbox"]');
@@ -508,7 +565,7 @@ add_action( 'init', function() {
                             }
                         }
 
-                        // Advanced options: Field conditionals
+                        // --- Advanced: Field conditionals ---
                         var $fieldConds = $el.find('.wapf-field__conditionals');
                         if ($fieldConds.length > 0) {
                             var conditionals = [];
